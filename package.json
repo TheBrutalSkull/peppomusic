@@ -12,5 +12,10 @@
   "bugs": {
     "url": "https://github.com/TheBrutalSkull/peppomusic/issues"
   },
-  "homepage": "https://github.com/TheBrutalSkull/peppomusic#readme"
+  "homepage": "https://github.com/TheBrutalSkull/peppomusic#readme",
+  "dependencies": {
+    "@discordjs/builders": "^1.6.5",
+    "@discordjs/rest": "^2.0.1",
+    "discord.js": "^14.13.0"
+  }
 }
