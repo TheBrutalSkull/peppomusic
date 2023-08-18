@@ -1,2 +1,2 @@
 # peppomusic
-A newver version of the music bot
+A newer version of the music bot
