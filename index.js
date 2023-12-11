@@ -12,23 +12,61 @@ const allIntents = [
   GatewayIntentBits.GuildVoiceStates,
 ];
 const client = new Client({ intents: allIntents });
-const config = require("./private/private.json");
-
+const ytCookie = require("./private/youtubeCookie.json");
+const Distube = require("distube");
+const { SpotifyPlugin } = require("@distube/spotify");
+const distube = new Distube.default(client, {
+  plugins: [new SpotifyPlugin()],
+  youtubeCookie: ytCookie.value,
+  leaveOnStop: true,
+  savePreviousSongs: true,
+  ytdlOptions: {
+    getInfoOption: {
+      requestCallback: true,
+    },
+    chooseFormatOptions: {
+      quality: "highestaudio",
+      filter: "audioonly",
+    },
+  },
+  emitAddSongWhenCreatingQueue: false,
+});
 const fs = require("fs");
-const commandFile = fs
-  .readdirSync("./commands")
-  .filter((file) => file.endsWith(".js"));
 
-const commands = [];
+const config = require("./private/private.json");
+const { clear } = require("console");
 
-client.commands = new Collection();
-console.clear();
-console.log("\nI loaded :");
-for (const file of commandFile) {
-  const command = require(`./commands/${file}`);
-  console.log(`${file}`);
-  commands.push(command.data.toJSON());
-  client.commands.set(command.data.name, command);
+function commandHandler() {
+  const path = require("path");
+  const commandFile = fs
+    .readdirSync("./commands")
+    .filter((file) => file.endsWith(".js"));
+
+  const commands = [];
+
+  client.commands = new Collection();
+  const foldersPath = path.join(__dirname, "commands");
+  const commandFolders = fs.readdirSync(foldersPath);
+  for (const folder of commandFolders) {
+    const commandsPath = path.join(foldersPath, folder);
+    const commandFiles = fs
+      .readdirSync(commandsPath)
+      .filter((file) => file.endsWith(".js"));
+    console.log(`\nIn ${folder} folder : `);
+    for (const file of commandFiles) {
+      const filePath = path.join(commandsPath, file);
+      const command = require(filePath);
+      // Set a new item in the Collection with the key as the command name and the value as the exported module
+      if ("data" in command && "execute" in command) {
+        client.commands.set(command.data.name, command);
+        console.log(`${file}`);
+      } else {
+        console.log(
+          `[WARNING] The file ${file} is missing a required "data" or "execute" property.`
+        );
+      }
+    }
+  }
 }
 
 client.on("interactionCreate", async (interaction) => {
@@ -48,10 +86,10 @@ client.on("interactionCreate", async (interaction) => {
     .setTimestamp();
 
   try {
-    await command.execute(interaction);
+    await command.execute(interaction, distube);
   } catch (error) {
     console.error(error);
-    exceptionThrowed.addField(`Error`, `${error}`);
+    exceptionThrowed.addFields({ name: `Error`, value: `${error}` });
     await interaction.reply({
       embeds: [exceptionThrowed],
       ephemeral: true,
@@ -59,8 +97,78 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-client.once("ready", (ready) => {
+client.once("ready", () => {
+  clear();
+  console.log(`Here's the Commands list I loaded`);
+  commandHandler();
   console.log(`\nLogged as ${client.user.tag}`);
 });
 
 client.login(config.token);
+
+//Distube Events
+distube.on("playSong", (queue, song) => {
+  const playEmbed = new EmbedBuilder();
+  const userAvatar = song.user.avatarURL();
+  const queue1 = distube.getQueue(queue.clientMember.guild.id);
+  playEmbed
+    .setAuthor({ name: `Now Playing`, iconURL: userAvatar })
+    .setTitle(`${song.name}`)
+    .setURL(`${song.url}`)
+    .setColor("#ff1100")
+    .setThumbnail(`${song.thumbnail}`)
+    .setTimestamp()
+    .addFields(
+      {
+        name: "Views",
+        value: `${song.views}`,
+        inline: true,
+      },
+      {
+        name: "Song Duration",
+        value: `${song.formattedDuration}`,
+        inline: true,
+      },
+      {
+        name: "Channel",
+        value: `<#${queue.voiceChannel.id}>`,
+        inline: true,
+      },
+      {
+        name: "Queue",
+        value: queue1.songs.length - 1 + " songs left",
+        inline: true,
+      },
+      {
+        name: "URL",
+        value: `${song.url}`,
+        inline: false,
+      }
+    );
+  queue.textChannel.send({ embeds: [playEmbed] });
+});
+distube.on("addSong", (queue, song) => {
+  //if (queue.songs.length > 1) {
+  const addEmbed = new EmbedBuilder();
+  addEmbed
+    .setAuthor({ name: `Adding song`, iconURL: song.user.displayAvatarURL() })
+    .setTitle(`${song.name}`)
+    .setURL(`${song.url}`)
+    .setColor("#ffbb00")
+    .setThumbnail(`${song.thumbnail}`)
+    .setTimestamp()
+    .addFields(
+      {
+        name: "Song Duration",
+        value: ` ***${song.formattedDuration}***`,
+        inline: true,
+      },
+      {
+        name: "URL",
+        value: `${song.url}`,
+        inline: false,
+      }
+    );
+  queue.textChannel.send({ embeds: [addEmbed] });
+  //}
+});
